@@ -1,76 +1,77 @@
+require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-const bcrypt = require('bcrypt');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const cors = require('cors');
 
 const app = express();
-const PORT = 3000;
-const JWT_SECRET = 'some-super-secret-key';
-
-app.use(cors());
 app.use(express.json());
+app.use(cors());
 
-const mockUser = {
-  id: 1,
-  username: 'testuser',
-  passwordHash: '$2a$12$eCZtOSKLF1ViUBp7vtbWpuJ/Hi71n9trCDM8ryns003LC78riE2c2', // "password123"
-};
+mongoose
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log('✅ Connected to MongoDB'))
+  .catch((err) => console.error('❌ MongoDB connection error:', err));
 
-// Login endpoint
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-
-  // Basic check
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Missing username or password' });
-  }
-
-  if (username !== mockUser.username) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-
-  // Verify password
-  const isMatch = await bcrypt.compare(password, mockUser.passwordHash);
-  if (!isMatch) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-
-  // Generate token
-  const token = jwt.sign(
-    { userId: mockUser.id, username: mockUser.username },
-    JWT_SECRET,
-    { expiresIn: '1h' }
-  );
-
-  res.json({ token });
+const UserSchema = new mongoose.Schema({
+  username: String,
+  email: String,
+  passwordHash: String,
 });
 
-// Protected route
-app.get('/protected', (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.replace('Bearer ', '');
+const User = mongoose.model('User', UserSchema);
 
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
+// **REGISTER ROUTE**
+app.post('/register', async (req, res) => {
+  const { username, email, password } = req.body;
+  const hashedPassword = await bcrypt.hash(password, 12);
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    return res.json({
-      message: `Hello ${decoded.username}, you are authorized!`,
+    const newUser = await User.create({
+      username,
+      email,
+      passwordHash: hashedPassword,
     });
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid token' });
+    res.status(201).json({ message: 'User registered successfully' });
+  } catch (error) {
+    res.status(400).json({ error: 'User registration failed' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Auth server running on http://localhost:${PORT}`);
+// **LOGIN ROUTE**
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user) return res.status(401).json({ error: 'User not found' });
+
+  const isValid = await bcrypt.compare(password, user.passwordHash);
+  if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
+
+  const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+    expiresIn: '1h',
+  });
+
+  res.json({ message: 'Login successful', token });
 });
 
-const hash = '$2a$12$eCZtOSKLF1ViUBp7vtbWpuJ/Hi71n9trCDM8ryns003LC78riE2c2';
-const plainPassword = 'password123'; // Try different passwords here
+// **PROTECTED ROUTE**
+app.get('/profile', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-bcrypt.compare(plainPassword, hash, (err, result) => {
-  console.log(result ? 'Password matches!' : 'Wrong password!');
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId).select('-passwordHash');
+    res.json(user);
+  } catch {
+    res.status(401).json({ error: 'Invalid token' });
+  }
 });
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
