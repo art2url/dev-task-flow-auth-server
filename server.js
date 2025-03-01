@@ -16,7 +16,7 @@ mongoose
 
 const UserSchema = new mongoose.Schema({
   username: String,
-  email: String,
+  email: { type: String, unique: true },
   passwordHash: String,
 });
 
@@ -25,9 +25,15 @@ const User = mongoose.model('User', UserSchema);
 // **REGISTER ROUTE**
 app.post('/register', async (req, res) => {
   const { username, email, password } = req.body;
-  const hashedPassword = await bcrypt.hash(password, 12);
 
   try {
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already registered.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
     const newUser = await User.create({
       username,
       email,
