@@ -127,7 +127,7 @@ app.post('/forgot-password', async (req, res) => {
         return res.status(500).json({ error: 'Failed to send email' });
       }
       console.log('✅ Email sent:', info.response);
-      res.json({ message: 'A new password has been sent to your email.' });
+      res.json({ message: 'New password sent to your email.' });
     });
   } catch (err) {
     console.error('❌ Forgot password error:', err);
