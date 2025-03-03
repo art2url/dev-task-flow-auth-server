@@ -8,13 +8,14 @@ const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(express.json());
-app.use(
-  cors({
-    origin: ['https://dev-task-flow.vercel.app'],
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,
-  })
-);
+app.use(cors({ origin: '*', credentials: true }));
+// app.use(
+//   cors({
+//     origin: ['https://dev-task-flow.vercel.app'],
+//     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+//     credentials: true,
+//   })
+// );
 
 mongoose
   .connect(process.env.MONGO_URI)
