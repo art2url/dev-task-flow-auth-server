@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(express.json());
@@ -76,5 +77,43 @@ app.get('/profile', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// **FORGOT PASSWORD ROUTE**
+app.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: 'Password Recovery - DevTaskFlow',
+    html: `
+      <h2>Password Recovery</h2>
+      <p>Hello <b>${user.username}</b>,</p>
+      <p>Your current password is: <b>${user.passwordHash}</b></p>
+      <p>Thank you,</p>
+      <p><b>DevTaskFlow Team</b></p>
+    `,
+  };
+
+  transporter.sendMail(mailOptions, (error) => {
+    if (error) {
+      return res.status(500).json({ error: 'Failed to send email' });
+    }
+    res.json({ message: 'Password sent to your email.' });
+  });
+});
+
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
