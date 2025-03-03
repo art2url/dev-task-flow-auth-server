@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 const app = express();
 app.use(express.json());
@@ -19,9 +20,19 @@ const UserSchema = new mongoose.Schema({
   username: String,
   email: { type: String, unique: true },
   passwordHash: String,
+  resetToken: String,
+  resetTokenExpiry: Date,
 });
 
 const User = mongoose.model('User', UserSchema);
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
 // **REGISTER ROUTE**
 app.post('/register', async (req, res) => {
@@ -77,14 +88,6 @@ app.get('/profile', async (req, res) => {
   }
 });
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
 // **FORGOT PASSWORD ROUTE**
 app.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
@@ -94,14 +97,25 @@ app.post('/forgot-password', async (req, res) => {
     return res.status(404).json({ error: 'User not found' });
   }
 
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const resetTokenExpiry = Date.now() + 3600000; // Token valid for 1 hour
+
+  user.resetToken = resetToken;
+  user.resetTokenExpiry = resetTokenExpiry;
+  await user.save();
+
+  const resetLink = `https://dev-task-flow-auth-server.onrender.com/reset-password/${resetToken}`;
+
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: email,
-    subject: 'Password Recovery - DevTaskFlow',
+    subject: 'Password Reset - DevTaskFlow',
     html: `
-      <h2>Password Recovery</h2>
+      <h2>Password Reset Request</h2>
       <p>Hello <b>${user.username}</b>,</p>
-      <p>Your current password is: <b>${user.passwordHash}</b></p>
+      <p>Click the link below to reset your password:</p>
+      <a href="${resetLink}" target="_blank">Reset Password</a>
+      <p>This link will expire in 1 hour.</p>
       <p>Thank you,</p>
       <p><b>DevTaskFlow Team</b></p>
     `,
@@ -111,8 +125,30 @@ app.post('/forgot-password', async (req, res) => {
     if (error) {
       return res.status(500).json({ error: 'Failed to send email' });
     }
-    res.json({ message: 'Password sent to your email.' });
+    res.json({ message: 'Password reset link sent to your email.' });
   });
+});
+
+// **RESET PASSWORD ROUTE**
+app.post('/reset-password/:token', async (req, res) => {
+  const { token } = req.params;
+  const { newPassword } = req.body;
+
+  const user = await User.findOne({
+    resetToken: token,
+    resetTokenExpiry: { $gt: Date.now() },
+  });
+
+  if (!user) {
+    return res.status(400).json({ error: 'Invalid or expired token' });
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, 12);
+  user.resetToken = undefined;
+  user.resetTokenExpiry = undefined;
+  await user.save();
+
+  res.json({ message: 'Password reset successfully. You can now log in.' });
 });
 
 const PORT = process.env.PORT || 3000;
