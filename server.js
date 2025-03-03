@@ -5,7 +5,6 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
-const crypto = require('crypto');
 
 const app = express();
 app.use(express.json());
@@ -25,7 +24,9 @@ const UserSchema = new mongoose.Schema({
 const User = mongoose.model('User', UserSchema);
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.aol.com',
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -90,37 +91,42 @@ app.get('/profile', async (req, res) => {
 // **FORGOT PASSWORD (Generate & Send New Password)**
 app.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
-  const user = await User.findOne({ email });
 
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-
-  const newPassword = Math.random().toString(36).slice(-8); // Generate random password
-  user.passwordHash = await bcrypt.hash(newPassword, 12);
-  await user.save();
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: 'New Password - DevTaskFlow',
-    html: `
-      <h2>New Password Generated</h2>
-      <p>Hello <b>${user.username}</b>,</p>
-      <p>Your new password is: <b>${newPassword}</b></p>
-      <p>Thank you,</p>
-      <p><b>DevTaskFlow Team</b></p>
-    `,
-  };
-
-  transporter.sendMail(mailOptions, (error, info) => {
-    if (error) {
-      console.error('❌ Email sending error:', error);
-      return res.status(500).json({ error: 'Failed to send email' });
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
-    console.log('✅ Email sent:', info.response);
-    res.json({ message: 'A new password has been sent to your email.' });
-  });
+
+    const newPassword = Math.random().toString(36).slice(-8);
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    await user.save();
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'New Password - DevTaskFlow',
+      html: `
+        <h2>New Password Generated</h2>
+        <p>Hello <b>${user.username}</b>,</p>
+        <p>Your new password is: <b>${newPassword}</b></p>
+        <p>Thank you,</p>
+        <p><b>DevTaskFlow Team</b></p>
+      `,
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.error('❌ Email sending error:', error);
+        return res.status(500).json({ error: 'Failed to send email' });
+      }
+      console.log('✅ Email sent:', info.response);
+      res.json({ message: 'A new password has been sent to your email.' });
+    });
+  } catch (err) {
+    console.error('❌ Forgot password error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
