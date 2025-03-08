@@ -1,6 +1,6 @@
 # DevTaskFlow Auth Server
 
-This **DevTaskFlow** backend handles user authentication and task management. It's built on **Node.js**, **Express**, **MongoDB**, and uses **JWT** for auth.
+DevTaskFlow Auth Server is a backend authentication service built with **Node.js**, **Express**, and **MongoDB**. It handles user authentication, authorization, and security using **JWT** tokens for auth. The server provides RESTful API endpoints for user management, login, registration, password recovery, and secure task data access. Integrated with Nodemailer for email-based password resets, it ensures a seamless authentication flow for the DevTaskFlow task management application.
 
 ---
 ## Features
